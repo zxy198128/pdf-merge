@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF 交替合并工具</title>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --line: #e3e8f2;
+    --line-strong: #cfd8e8;
+    --text: #1a2233;
+    --muted: #6b768c;
+    --primary: #3b6ef6;
+    --primary-dark: #2c56cd;
+    --a: #3b6ef6;
+    --a-soft: #eaf0ff;
+    --b: #ea8a12;
+    --b-soft: #fff3e2;
+    --ok: #12864a;
+    --danger: #d8452f;
+    --radius: 16px;
+    --shadow: 0 10px 30px rgba(28, 46, 92, .07);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100vh;
+    background-image:
+      radial-gradient(600px 320px at 8% -6%, rgba(59, 110, 246, .13), transparent 70%),
+      radial-gradient(560px 300px at 96% 0%, rgba(234, 138, 18, .11), transparent 70%);
+    background-repeat: no-repeat;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 48px 22px 72px;
+  }
+
+  header { margin-bottom: 26px; }
+
+  h1 {
+    font-size: 28px;
+    line-height: 1.3;
+    margin: 0 0 10px;
+    letter-spacing: .3px;
+  }
+
+  .lede {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #e9f8ef;
+    color: var(--ok);
+    font-size: 12.5px;
+    font-weight: 600;
+    border: 1px solid #c8ebd6;
+  }
+
+  .pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ok);
+  }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px;
+    margin-bottom: 18px;
+  }
+
+  .panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #2b3547;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .idx {
+    width: 20px; height: 20px;
+    border-radius: 6px;
+    background: #eef2fb;
+    color: #4a5a78;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+
+  .slots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .slots { grid-template-columns: 1fr; }
+    .wrap { padding: 30px 16px 56px; }
+    h1 { font-size: 23px; }
+  }
+
+  .slot {
+    position: relative;
+    border: 2px dashed var(--line-strong);
+    border-radius: 14px;
+    background: #fbfcff;
+    padding: 20px 18px;
+    min-height: 158px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .18s, background .18s, transform .18s;
+  }
+
+  .slot:hover { border-color: #a9bce8; background: #f7f9ff; }
+  .slot.drag { border-color: var(--primary); background: var(--a-soft); transform: translateY(-1px); }
+  .slot[data-tone="b"] .drag, .slot[data-tone="b"].drag { border-color: var(--b); background: var(--b-soft); }
+  .slot.filled { border-style: solid; border-color: var(--line); background: #fff; cursor: default; text-align: left; justify-content: flex-start; }
+
+  .slot .badge {
+    position: absolute;
+    top: 12px; left: 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .slot[data-tone="a"] .badge { background: var(--a-soft); color: var(--a); }
+  .slot[data-tone="b"] .badge { background: var(--b-soft); color: #b56a05; }
+
+  .slot .empty-icon {
+    font-size: 26px;
+    line-height: 1;
+    margin-bottom: 10px;
+    opacity: .55;
+  }
+
+  .slot .empty-title { font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+  .slot .empty-hint { font-size: 12.5px; color: var(--muted); }
+
+  .file-row { display: flex; align-items: flex-start; gap: 12px; margin-top: 26px; }
+
+  .file-icon {
+    flex: none;
+    width: 38px; height: 44px;
+    border-radius: 7px;
+    background: #f1f4fb;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: #8b97ad; letter-spacing: .5px;
+  }
+
+  .file-meta { min-width: 0; flex: 1; }
+
+  .file-name {
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.45;
+    word-break: break-all;
+    margin-bottom: 5px;
+  }
+
+  .file-sub { font-size: 12.5px; color: var(--muted); }
+  .file-sub b { color: #34405a; font-weight: 700; }
+
+  .remove {
+    flex: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .remove:hover { color: var(--danger); border-color: #f0c3ba; background: #fff7f5; }
+
+  .slot input[type=file] { display: none; }
+
+  .modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .modes { grid-template-columns: 1fr; }
+  }
+
+  .mode { display: block; cursor: pointer; }
+  .mode input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+  .mode-body {
+    display: block;
+    height: 100%;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 13px 15px;
+    background: #fbfcff;
+    transition: border-color .16s, background .16s, box-shadow .16s;
+  }
+
+  .mode-body b {
+    display: block;
+    font-size: 13.5px;
+    color: #2b3547;
+    margin-bottom: 5px;
+  }
+
+  .mode-body small {
+    display: block;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
+  .mode:hover .mode-body { border-color: #a9bce8; }
+
+  .mode input:checked + .mode-body {
+    border-color: var(--primary);
+    background: var(--a-soft);
+    box-shadow: 0 0 0 3px rgba(59, 110, 246, .1);
+  }
+
+  .mode input:checked + .mode-body b { color: var(--primary-dark); }
+
+  .mode input:focus-visible + .mode-body {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  .opts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 22px;
+  }
+
+  .field { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: #3a465e; }
+  .field > span { white-space: nowrap; }
+
+  .field.check { cursor: pointer; user-select: none; }
+  .field.check input[type=checkbox] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+  }
+
+  select, input[type=text] {
+    font: inherit;
+    font-size: 13.5px;
+    padding: 8px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    background: #fff;
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+
+  select:focus, input[type=text]:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(59, 110, 246, .13);
+  }
+
+  input[type=text] { min-width: 230px; }
+
+  .preview-line {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+  .chip {
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+  }
+
+  .chip.a { background: var(--a-soft); color: var(--a); border-color: #d7e2ff; }
+  .chip.b { background: var(--b-soft); color: #b56a05; border-color: #fbe0bb; }
+  .chip.more { background: #f2f4f9; color: #6b768c; border-color: var(--line); }
+
+  .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+  .btn {
+    font: inherit;
+    border: none;
+    border-radius: 11px;
+    padding: 12px 26px;
+    font-size: 14.5px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s, background .15s, opacity .15s;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #4d7cf8, #3259d8);
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(59, 110, 246, .28);
+  }
+
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 11px 24px rgba(59, 110, 246, .34); }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+  .btn-ghost {
+    background: #fff;
+    color: #364259;
+    border: 1px solid var(--line-strong);
+  }
+
+  .btn-ghost:hover { border-color: #a9bce8; background: #f8faff; }
+
+  .status { font-size: 13px; color: var(--muted); min-height: 18px; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: var(--ok); }
+
+  .spinner {
+    width: 15px; height: 15px;
+    border: 2px solid #cfdbf5;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: -2px;
+    margin-right: 7px;
+    animation: spin .7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result { display: none; }
+  .result.show { display: block; animation: rise .3s ease-out; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .result-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .tick {
+    width: 19px; height: 19px; border-radius: 50%;
+    background: #e9f8ef; color: var(--ok);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 900;
+  }
+
+  .result-stats { font-size: 13px; color: var(--muted); }
+  .result-stats b { color: #2b3547; }
+
+  iframe {
+    width: 100%;
+    height: 520px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #f7f8fb;
+  }
+
+  @media (max-width: 720px) {
+    iframe { height: 380px; }
+    input[type=text] { min-width: 0; width: 100%; }
+    .field { width: 100%; }
+    .btn { width: 100%; justify-content: center; }
+  }
+
+  .foot {
+    text-align: center;
+    color: #98a2b6;
+    font-size: 12px;
+    margin-top: 26px;
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PDF 合并工具</h1>
+    <p class="lede">
+      支持两种合并方式：<b>交替合并</b>——文件一正序、文件二倒序逐页交叉（第 1 页 = 文件一第 1 页，
+      第 2 页 = 文件二最后一页，依此类推）；<b>顺序合并</b>——文件一全部页在前，文件二全部页在后。
+    </p>
+    <span class="pill"><span class="dot"></span>全程在本地浏览器处理，文件不会上传</span>
+  </header>
+
+  <div class="panel">
+    <div class="panel-title"><span class="idx">1</span>选择两个 PDF 文件</div>
+    <div class="slots">
+      <div class="slot" data-tone="a" id="slotA">
+        <span class="badge">文件一</span>
+        <input type="file" id="fileA" accept="application/pdf,.pdf">
+        <div class="empty-state">
+          <div class="empty-icon">📄</div>
+          <div class="empty-title">点击选择或拖入 PDF</div>
+          <div class="empty-hint">交替模式下作为第 1、3、5… 页<br>顺序模式下排在最前</div>
+        </div>
+      </div>
+
+      <div class="slot" data-tone="b" id="slotB">
+        <span class="badge">文件二</span>
+        <input type="file" id="fileB" accept="application/pdf,.pdf">
+        <div class="empty-state">
+          <div class="empty-icon">📄</div>
+          <div class="empty-title">点击选择或拖入 PDF</div>
+          <div class="empty-hint">交替模式下从最后一页倒序取页<br>顺序模式下排在最后</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="idx">2</span>合并选项</div>
+
+    <div class="modes">
+      <label class="mode">
+        <input type="radio" name="mode" value="alternate" checked>
+        <span class="mode-body">
+          <b>交替合并</b>
+          <small>文件一正序 + 文件二倒序，逐页交叉装订（双面扫描对齐）</small>
+        </span>
+      </label>
+      <label class="mode">
+        <input type="radio" name="mode" value="sequential">
+        <span class="mode-body">
+          <b>顺序合并</b>
+          <small>文件一全部页在前，文件二全部页在后，首尾相接</small>
+        </span>
+      </label>
+    </div>
+
+    <div class="opts" id="altOpts">
+      <label class="field check">
+        <input type="checkbox" id="reverseB" checked>
+        <span>文件二倒序取页（从最后一页开始）</span>
+      </label>
+      <label class="field">
+        <span>页数不相等时</span>
+        <select id="remainder">
+          <option value="append" selected>剩余页追加到末尾</option>
+          <option value="trim">只合并到较短文件为止</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="opts" style="margin-top:14px">
+      <label class="field">
+        <span>输出文件名</span>
+        <input type="text" id="outName" value="合并结果.pdf">
+      </label>
+    </div>
+    <div class="preview-line" id="previewLine">选择两个文件后，这里会显示实际的页面排布顺序。</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="idx">3</span>开始合并</div>
+    <div class="actions">
+      <button class="btn btn-primary" id="mergeBtn" disabled>开始合并</button>
+      <span class="status" id="status"></span>
+    </div>
+  </div>
+
+  <div class="panel result" id="result">
+    <div class="result-head">
+      <div class="result-title"><span class="tick">✓</span>合并完成</div>
+      <div class="result-stats" id="resultStats"></div>
+    </div>
+    <div class="actions" style="margin-bottom:16px">
+      <button class="btn btn-primary" id="downloadBtn">下载合并后的 PDF</button>
+      <button class="btn btn-ghost" id="restartBtn">重新开始</button>
+    </div>
+    <iframe id="previewFrame" title="合并结果预览"></iframe>
+  </div>
+
+  <div class="foot">
+    纯前端实现，使用 pdf-lib 处理页面复制，原文件不会被修改。<br>
+    加密 PDF 需先去除密码；扫描件合并不会重新压缩，体积基本等于两文件之和。
+  </div>
+</div>
+
+<script src="pdf-lib.min.js"></script>
+<script src="merge.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var PDFLib = window.PDFLib;
+  var Core = window.PDFMergeCore;
+
+  var els = {
+    slotA: document.getElementById("slotA"),
+    slotB: document.getElementById("slotB"),
+    fileA: document.getElementById("fileA"),
+    fileB: document.getElementById("fileB"),
+    remainder: document.getElementById("remainder"),
+    reverseB: document.getElementById("reverseB"),
+    altOpts: document.getElementById("altOpts"),
+    modeRadios: document.querySelectorAll('input[name="mode"]'),
+    outName: document.getElementById("outName"),
+    previewLine: document.getElementById("previewLine"),
+    mergeBtn: document.getElementById("mergeBtn"),
+    status: document.getElementById("status"),
+    result: document.getElementById("result"),
+    resultStats: document.getElementById("resultStats"),
+    downloadBtn: document.getElementById("downloadBtn"),
+    restartBtn: document.getElementById("restartBtn"),
+    previewFrame: document.getElementById("previewFrame")
+  };
+
+  var state = { A: null, B: null };
+  var output = null;
+  var outputUrl = null;
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1024 / 1024).toFixed(2) + " MB";
+  }
+
+  function setStatus(text, kind) {
+    els.status.className = "status" + (kind ? " " + kind : "");
+    els.status.innerHTML = text || "";
+  }
+
+  function busy(on) {
+    els.mergeBtn.disabled = on || !(state.A && state.B);
+    els.mergeBtn.textContent = on ? "合并中…" : "开始合并";
+  }
+
+  function renderSlot(slot) {
+    var el = slot === "A" ? els.slotA : els.slotB;
+    var data = state[slot];
+    var empty = el.querySelector(".empty-state");
+    var filled = el.querySelector(".filled-state");
+
+    if (filled) filled.remove();
+
+    if (!data) {
+      el.classList.remove("filled");
+      empty.style.display = "";
+      return;
+    }
+
+    if (empty) empty.style.display = "none";
+    el.classList.add("filled");
+
+    var box = document.createElement("div");
+    box.className = "filled-state";
+    box.style.width = "100%";
+    box.innerHTML =
+      '<div class="file-row">' +
+        '<div class="file-icon">PDF</div>' +
+        '<div class="file-meta">' +
+          '<div class="file-name"></div>' +
+          '<div class="file-sub">共 <b>' + data.count + '</b> 页 · ' + fmtSize(data.size) + '</div>' +
+        '</div>' +
+      '</div>';
+    box.querySelector(".file-name").textContent = data.name;
+
+    var btn = document.createElement("button");
+    btn.className = "remove";
+    btn.type = "button";
+    btn.textContent = "移除";
+    btn.style.cssText = "position:absolute;top:11px;right:12px;";
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      state[slot] = null;
+      (slot === "A" ? els.fileA : els.fileB).value = "";
+      renderSlot(slot);
+      refreshPreview();
+      busy(false);
+      hideResult();
+      setStatus("");
+    });
+
+    box.querySelector(".file-row").appendChild(btn);
+    el.appendChild(box);
+  }
+
+  function currentMode() {
+    var checked = document.querySelector('input[name="mode"]:checked');
+    return checked ? checked.value : "alternate";
+  }
+
+  function currentPlan() {
+    if (!state.A || !state.B) return null;
+    if (currentMode() === "sequential") {
+      return Core.buildSequentialPlan(state.A.count, state.B.count);
+    }
+    return Core.buildPlan(
+      state.A.count,
+      state.B.count,
+      els.remainder.value === "append",
+      els.reverseB.checked
+    );
+  }
+
+  function refreshPreview() {
+    var plan = currentPlan();
+    if (!plan) {
+      els.previewLine.textContent = "选择两个文件后，这里会显示实际的页面排布顺序。";
+      return;
+    }
+
+    var maxShow = 14;
+    var chips = plan.slice(0, maxShow).map(function (step, i) {
+      var label = (step.src === "A" ? "文件一 P" : "文件二 P") + (step.index + 1);
+      return '<span class="chip ' + step.src.toLowerCase() + '" title="第 ' + (i + 1) + ' 页">' +
+        label + "</span>";
+    });
+
+    if (plan.length > maxShow) {
+      chips.push('<span class="chip more">+ 还有 ' + (plan.length - maxShow) + " 页</span>");
+    }
+
+    var head;
+    if (currentMode() === "sequential") {
+      head = "顺序合并：共 <b>" + plan.length + "</b> 页，文件一 " + state.A.count +
+        " 页在前、文件二 " + state.B.count + " 页在后，排布顺序：";
+    } else {
+      head = "交替合并：共 <b>" + plan.length + "</b> 页，" +
+        (els.reverseB.checked ? "文件二从最后一页往前取，" : "") +
+        "排布顺序：";
+      if (state.A.count !== state.B.count) {
+        head += els.remainder.value === "append"
+          ? "（文件页数不同，较长文件的剩余页已排在末尾）"
+          : "（文件页数不同，多余页已舍弃）";
+      }
+    }
+
+    els.previewLine.innerHTML = head + '<div class="chips">' + chips.join("") + "</div>";
+  }
+
+  function hideResult() {
+    els.result.classList.remove("show");
+    if (outputUrl) {
+      URL.revokeObjectURL(outputUrl);
+      outputUrl = null;
+    }
+    els.previewFrame.removeAttribute("src");
+    output = null;
+  }
+
+  async function readFile(slot, file) {
+    if (!file) return;
+
+    var isPdf = /\.pdf$/i.test(file.name) ||
+      file.type === "application/pdf";
+
+    if (!isPdf) {
+      setStatus("请选择 .pdf 格式的文件。", "err");
+      return;
+    }
+    if (file.size === 0) {
+      setStatus("文件是空的，请确认后重试。", "err");
+      return;
+    }
+
+    setStatus('<span class="spinner"></span>正在读取「' + file.name + "」…");
+
+    try {
+      var buffer = await file.arrayBuffer();
+      var doc = await PDFLib.PDFDocument.load(buffer, {
+        ignoreEncryption: false,
+        updateMetadata: false
+      });
+
+      state[slot] = {
+        name: file.name,
+        size: file.size,
+        count: doc.getPageCount(),
+        buffer: buffer
+      };
+
+      renderSlot(slot);
+      refreshPreview();
+      busy(false);
+      hideResult();
+      setStatus("已就绪，可以开始合并。", "ok");
+    } catch (err) {
+      state[slot] = null;
+      renderSlot(slot);
+      refreshPreview();
+      busy(false);
+
+      var msg = String((err && err.message) || err);
+      if (/encrypt/i.test(msg)) {
+        setStatus("这个 PDF 已加密，请先用阅读器去掉密码再导入。", "err");
+      } else if (/No PDF header|Failed to parse|Invalid PDF structure/i.test(msg)) {
+        setStatus("这个文件不是有效的 PDF，或者已经损坏。", "err");
+      } else {
+        setStatus("读取失败：" + msg, "err");
+      }
+    }
+  }
+
+  function bindSlot(slot) {
+    var el = slot === "A" ? els.slotA : els.slotB;
+    var input = slot === "A" ? els.fileA : els.fileB;
+
+    el.addEventListener("click", function (e) {
+      if (e.target.closest(".remove")) return;
+      if (state[slot]) return;
+      input.click();
+    });
+
+    input.addEventListener("change", function () {
+      if (input.files && input.files[0]) readFile(slot, input.files[0]);
+    });
+
+    ["dragenter", "dragover"].forEach(function (type) {
+      el.addEventListener(type, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!state[slot]) el.classList.add("drag");
+      });
+    });
+
+    ["dragleave", "dragend"].forEach(function (type) {
+      el.addEventListener(type, function (e) {
+        e.preventDefault();
+        el.classList.remove("drag");
+      });
+    });
+
+    el.addEventListener("drop", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove("drag");
+      if (state[slot]) return;
+      var dt = e.dataTransfer;
+      if (dt && dt.files && dt.files[0]) readFile(slot, dt.files[0]);
+    });
+  }
+
+  function nextFrame() {
+    return new Promise(function (resolve) { setTimeout(resolve, 30); });
+  }
+
+  function safeFileName(raw) {
+    var name = (raw || "").trim().replace(/[\\/:*?"<>|]+/g, "_");
+    if (!name) name = "合并结果";
+    if (!/\.pdf$/i.test(name)) name += ".pdf";
+    return name;
+  }
+
+  async function doMerge() {
+    if (!state.A || !state.B) return;
+
+    hideResult();
+    busy(true);
+    setStatus('<span class="spinner"></span>正在合并页面…');
+
+    await nextFrame();
+
+    try {
+      var res;
+      if (currentMode() === "sequential") {
+        res = await Core.mergeSequential(PDFLib, state.A.buffer, state.B.buffer);
+      } else {
+        res = await Core.mergeAlternating(
+          PDFLib,
+          state.A.buffer,
+          state.B.buffer,
+          {
+            keepRemainder: els.remainder.value === "append",
+            reverseB: els.reverseB.checked
+          }
+        );
+      }
+
+      output = res;
+
+      var blob = new Blob([res.bytes], { type: "application/pdf" });
+      outputUrl = URL.createObjectURL(blob);
+      els.previewFrame.src = outputUrl;
+
+      els.resultStats.innerHTML =
+        "共 <b>" + res.totalPages + "</b> 页 · " +
+        "文件一 " + res.countA + " 页 / 文件二 " + res.countB + " 页 · " +
+        fmtSize(blob.size);
+
+      els.result.classList.add("show");
+      els.result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+      setStatus("合并成功。", "ok");
+    } catch (err) {
+      setStatus((err && err.message) ? err.message : "合并失败，请重试。", "err");
+    } finally {
+      busy(false);
+    }
+  }
+
+  els.mergeBtn.addEventListener("click", doMerge);
+
+  els.downloadBtn.addEventListener("click", function () {
+    if (!output) return;
+    var blob = new Blob([output.bytes], { type: "application/pdf" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = safeFileName(els.outName.value);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  });
+
+  els.restartBtn.addEventListener("click", function () {
+    state.A = null;
+    state.B = null;
+    els.fileA.value = "";
+    els.fileB.value = "";
+    renderSlot("A");
+    renderSlot("B");
+    refreshPreview();
+    hideResult();
+    busy(false);
+    setStatus("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  els.remainder.addEventListener("change", function () {
+    refreshPreview();
+    if (output) hideResult();
+  });
+
+  els.reverseB.addEventListener("change", function () {
+    refreshPreview();
+    if (output) hideResult();
+  });
+
+  function updateModeUi() {
+    var isSequential = currentMode() === "sequential";
+    els.altOpts.style.display = isSequential ? "none" : "";
+    refreshPreview();
+    if (output) hideResult();
+  }
+
+  els.modeRadios.forEach(function (radio) {
+    radio.addEventListener("change", updateModeUi);
+  });
+
+  bindSlot("A");
+  bindSlot("B");
+  updateModeUi();
+})();
+</script>
+</body>
+</html>
